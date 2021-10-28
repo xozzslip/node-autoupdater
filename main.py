@@ -16,6 +16,7 @@
 import subprocess
 import re
 import os
+import sys
 
 
 def subprocess_run(cmd: str, path: str) -> str:
@@ -38,7 +39,7 @@ def latest_version(source_dir: str) -> str:
 def current_version(supervisor_config_file: str):
     with open(supervisor_config_file) as f:
         supervisor_config = f.read()
-    m = re.search("command=[\w\/]+_(v[0-9\.]+)", supervisor_config)
+    m = re.search("command=[\.\w\/]+_(v[0-9\.]+)", supervisor_config)
     groups = m.groups()
     if len(groups) == 0:
         raise ValueError(f"failed to parse supervisor config file {supervisor_config_file}")
@@ -76,11 +77,42 @@ def build(source_dir: str):
     subprocess_run("make geth", path=source_dir)
 
 
-def move_binary(version: str, binary_path: str, binary_dir: str):
+def move_binary(version: str, binary_path: str, binary_dir: str) -> str:
     if not os.path.isdir(binary_dir):
         os.mkdir(binary_dir)
     _, filename = os.path.split(binary_path)
-    subprocess_run(f"cp {binary_path} {binary_dir}/{filename}_{version}", ".")
+    new_binary_path = f"{binary_dir}/{filename}_{version}"
+    subprocess_run(f"cp {binary_path} {new_binary_path}", ".")
+    return new_binary_path
+
+
+def rewrite_supervisor_config(binary_path: str, supervisor_config_file: str):
+    with open(supervisor_config_file) as f:
+        supervisor_config = f.read()
+    m = re.search("command=[\.\w\/]+_(v[0-9\.]+)", supervisor_config)
+    command = m.group()
+    supervisor_config = supervisor_config.replace(command, f"command={binary_path}")
+    with open(supervisor_config_file, "w") as f:
+        f.write(supervisor_config)
+
+
+def update_supervisor():
+    subprocess_run("sudo supervisorctl reread", ".")
+    subprocess_run("sudo supervisorctl update", ".")
+    subprocess_run("sudo supervisorctl status", ".")
+
+
+def execute(supervisor_config_file: str, source_dir: str, binary_dir: str):
+    latest_v = latest_version(source_dir)
+    # current_v = current_version(supervisor_config_file)
+    # if current_v == latest_v:
+    #     return
+    checkout(source_dir, latest_v)
+    patch(find_patch_file(source_dir))
+    build(source_dir)
+    binary_path = move_binary(latest_v, os.path.join(source_dir, "eth_node"), binary_dir)
+    rewrite_supervisor_config(binary_path, supervisor_config_file)
+    update_supervisor()
 
 
 def tests():
@@ -88,15 +120,25 @@ def tests():
     assert current_version("./supervisor_example.conf") == "v1.10.6"
 
     source_dir = "/home/khasan/trash/patched/go-ethereum"
+    binary_dir = "/home/khasan/code/gitwatcher/binary"
     version = latest_version(source_dir)
     print(version)
     checkout(source_dir, version)
     patch(find_patch_file(source_dir))
     build(source_dir)
-    move_binary(version, os.path.join(source_dir, "eth_node"), "./binary")
+    binary_path = move_binary(version, os.path.join(source_dir, "eth_node"), binary_dir)
+    rewrite_supervisor_config(binary_path, "./supervisor_example2.conf")
 
-# Press the green button in the gutter to run the script.
+
+def main():
+    config = sys.argv[1]
+    project_path = sys.argv[2]
+    sources_path = os.path.join(project_path, "sources")
+    binary_path = os.path.join(project_path, "binaries")
+    if not os.path.isdir(project_path):
+        raise ValueError(f"project path {project_path} should be a dir")
+    execute(config, sources_path, binary_path)
+
+
 if __name__ == '__main__':
-    tests()
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    main()
