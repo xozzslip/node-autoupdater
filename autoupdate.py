@@ -99,6 +99,8 @@ func (s *PublicBlockChainAPI) getBlockReceipts(ctx context.Context, txByHash map
 }
 """
 
+BINARY_PATH_REGEXP = r"command=[\.\w\/]+_(v[0-9\.]+[\w-]*)"
+
 
 def subprocess_run(cmd: str, path: str) -> str:
     cwd = os.getcwd()
@@ -120,7 +122,7 @@ def latest_version(source_dir: str) -> str:
 def current_version(supervisor_config_file: str):
     with open(supervisor_config_file) as f:
         supervisor_config = f.read()
-    m = re.search("command=[\.\w\/]+_(v[0-9\.]+)", supervisor_config)
+    m = re.search(BINARY_PATH_REGEXP, supervisor_config)
     groups = m.groups()
     if len(groups) == 0:
         raise ValueError(f"failed to parse supervisor config file {supervisor_config_file}")
@@ -167,7 +169,7 @@ def move_binary(version: str, binary_path: str, binary_dir: str) -> str:
 def rewrite_supervisor_config(binary_path: str, supervisor_config_file: str):
     with open(supervisor_config_file) as f:
         supervisor_config = f.read()
-    m = re.search("command=[\.\w\/]+_(v[0-9\.]+)", supervisor_config)
+    m = re.search(BINARY_PATH_REGEXP, supervisor_config)
     command = m.group()
     supervisor_config = supervisor_config.replace(command, f"command={binary_path}")
     with open(supervisor_config_file, "w") as f:
