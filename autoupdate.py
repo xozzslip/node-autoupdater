@@ -133,7 +133,7 @@ def checkout(source_dir: str, version: str):
 
 
 def find_patch_file(source_dir: str):
-    file = subprocess_run(f"grep -r --include='*.go' --files-with-matches 'PublicBlockChainAPI)' {source_dir}", ".")
+    file = subprocess_run(f"grep -r --include='*.go' --files-with-matches 'func (s \*PublicBlockChainAPI) GetHeaderByNumber(ctx' {source_dir}", ".")
 
     print(file)
     if not os.path.isfile(file):
